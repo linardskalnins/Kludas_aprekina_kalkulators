@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="lv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kļūdas aprēķina kalkulators</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 640px;
+      margin: 40px auto;
+      padding: 0 16px;
+      background: #f4f6f8;
+      color: #222;
+    }
+    h1 { font-size: 1.6em; }
+    .karte {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    }
+    label { display: block; margin-top: 14px; font-weight: bold; }
+    textarea, select {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 6px;
+      padding: 8px;
+      font-size: 1em;
+    }
+    textarea { height: 90px; }
+    button {
+      margin-top: 16px;
+      padding: 10px 20px;
+      font-size: 1em;
+      background: #1f6feb;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover { background: #1558c0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    td { padding: 6px; border-bottom: 1px solid #ddd; }
+    td:last-child { text-align: right; font-family: monospace; }
+    .rezultats { font-size: 1.3em; font-weight: bold; margin-top: 16px; }
+    .kluda { color: #b00020; font-weight: bold; margin-top: 16px; }
+    .piezime { font-size: 0.9em; color: #555; }
+  </style>
+</head>
+<body>
+
+  <h1>Kļūdas aprēķina kalkulators</h1>
+
+  <div class="karte">
+    <label for="merijumi">Mērījumu rezultāti</label>
+    <p class="piezime">Atdali ar atstarpi, semikolu vai jaunu rindu. Decimāldaļām drīkst lietot gan punktu, gan komatu.</p>
+    <textarea id="merijumi" placeholder="piem., 2,31 2,35 2,29 2,33"></textarea>
+
+    <label for="ticamiba">Ticamības līmenis</label>
+    <select id="ticamiba">
+      <option value="90">90 %</option>
+      <option value="95" selected>95 %</option>
+      <option value="99">99 %</option>
+    </select>
+
+    <button onclick="aprekinat()">Aprēķināt</button>
+
+    <div id="izvade"></div>
+  </div>
+
+  <script>
+    // Stjūdenta koeficienti: indekss 0 atbilst 1 brīvības pakāpei (n = 2 mērījumi),
+    // indekss 1 atbilst 2 brīvības pakāpēm (n = 3) utt.
+    const koeficienti = {
+      90: [6.314, 2.920, 2.353, 2.132, 2.015, 1.943, 1.895, 1.860, 1.833, 1.812,
+           1.796, 1.782, 1.771, 1.761, 1.753, 1.746, 1.740, 1.734, 1.729, 1.725],
+      95: [12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228,
+           2.201, 2.179, 2.160, 2.145, 2.131, 2.120, 2.110, 2.101, 2.093, 2.086],
+      99: [63.657, 9.925, 5.841, 4.604, 4.032, 3.707, 3.499, 3.355, 3.250, 3.169,
+           3.106, 3.055, 3.012, 2.977, 2.947, 2.921, 2.898, 2.878, 2.861, 2.845]
+    };
+
+    function aprekinat() {
+      const izvade = document.getElementById("izvade");
+      const teksts = document.getElementById("merijumi").value;
+      const ticamiba = document.getElementById("ticamiba").value;
+
+      // 1. Nolasām skaitļus: komatu aizstājam ar punktu, sadalām pa atstarpēm/semikoliem
+      const dati = teksts
+        .replace(/,/g, ".")
+        .split(/[\s;]+/)
+        .filter(x => x !== "")
+        .map(Number);
+
+      if (dati.some(isNaN)) {
+        izvade.innerHTML = '<p class="kluda">Ievadē ir kaut kas, kas nav skaitlis.</p>';
+        return;
+      }
+      const n = dati.length;
+      if (n < 2) {
+        izvade.innerHTML = '<p class="kluda">Vajag vismaz 2 mērījumus.</p>';
+        return;
+      }
+
+      // 2. Vidējā vērtība
+      let summa = 0;
+      for (const x of dati) summa += x;
+      const videjais = summa / n;
+
+      // 3. Noviržu kvadrātu summa
+      let noviržuKvadrātuSumma = 0;
+      for (const x of dati) noviržuKvadrātuSumma += (x - videjais) ** 2;
+
+      // 4. Vidējās vērtības standartnovirze
+      const standartnovirze = Math.sqrt(noviržuKvadrātuSumma / (n * (n - 1)));
+
+      // 5. Stjūdenta koeficients (ja mērījumu ir vairāk nekā tabulā, ņemam pēdējo vērtību)
+      const tabula = koeficienti[ticamiba];
+      const indekss = Math.min(n - 2, tabula.length - 1);
+      const t = tabula[indekss];
+
+      // 6. Absolūtā un relatīvā kļūda
+      const absKluda = t * standartnovirze;
+      const relKluda = videjais !== 0 ? Math.abs(absKluda / videjais) * 100 : NaN;
+
+      // 7. Izvade
+      izvade.innerHTML = `
+        <table>
+          <tr><td>Mērījumu skaits n</td><td>${n}</td></tr>
+          <tr><td>Vidējā vērtība</td><td>${videjais.toFixed(4)}</td></tr>
+          <tr><td>Noviržu kvadrātu summa</td><td>${noviržuKvadrātuSumma.toFixed(6)}</td></tr>
+          <tr><td>Vidējās vērtības standartnovirze</td><td>${standartnovirze.toFixed(4)}</td></tr>
+          <tr><td>Stjūdenta koeficients (${ticamiba} %)</td><td>${t}</td></tr>
+          <tr><td>Absolūtā kļūda Δx</td><td>${absKluda.toFixed(4)}</td></tr>
+          <tr><td>Relatīvā kļūda ε</td><td>${relKluda.toFixed(2)} %</td></tr>
+        </table>
+        <p class="rezultats">x = ${videjais.toFixed(3)} ± ${absKluda.toFixed(3)}</p>
+      `;
+    }
+  </script>
+
+</body>
+</html>
